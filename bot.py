@@ -1,9 +1,11 @@
-from telegram.ext import (ApplicationBuilder, ContextTypes, CommandHandler,
-                          CallbackContext)
-from telegram import Update
 import logging
-from dotenv import load_dotenv
 import os
+import json
+import requests
+from telegram import Update
+from telegram.ext import (ApplicationBuilder, ContextTypes, CommandHandler, CallbackContext)
+from dotenv import load_dotenv
+from translator import run_spider, ReversoContextScraperSpider
 
 load_dotenv()
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -24,12 +26,13 @@ async def help_me(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                          '/cotacao moeda - Mostra a cotação atual da moeda escolhida,'
                                          ' (dólar ou euro). Por exemplo: /cotacao dólar\n'
                                          '/traducao palavras - Traduz do inglês para o português as palavras'
-                                         ' digitadas, podendo separar por vírgulas e espaço.',
+                                         ' digitadas, podendo separar por vírgulas e espaço.\n'
+                                         '/clima cidade, sigla do estado - Retorna a temperatura atual na '
+                                         'cidade/estado especificados. Ex: Rio de Janeiro, RJ',
                                     reply_to_message_id=update.message.id)
 
 
 async def cotacao(update: Update, context: CallbackContext):
-    import requests
     requisicao = requests.get('https://economia.awesomeapi.com.br/last/USD-BRL,EUR-BRL').json()
     # last_message = update.message.text.lower().strip()
     if context.args:
@@ -53,8 +56,6 @@ async def cotacao(update: Update, context: CallbackContext):
 
 
 async def traducao(update: Update, context: CallbackContext):
-    from translator import run_spider, ReversoContextScraperSpider
-    import json
     if context.args:
         words = list(context.args)
         print(words)
@@ -78,8 +79,23 @@ async def traducao(update: Update, context: CallbackContext):
         await update.message.reply_text('Utilize uma palavra ou mais palavras como parâmetro.')
 
 
-# async def download_ytb(update: Update, context: CallbackContext):
-#     await update.effective_chat.send_video('')
+async def clima(update: Update, context: CallbackContext):
+    api_key = os.getenv('API_KEY')
+    if context.args:
+        print(context.args)
+        argumentos_formatados = ' '.join(context.args).split(',')
+        city = argumentos_formatados[0]
+        state = argumentos_formatados[1]
+        country = 'Brasil'
+        lang = 'pt-br'
+
+        current_weather_data = requests.get(f'https://api.openweathermap.org/data/2.5/weather?'
+                                            f'q={city},{state},{country}&appid={api_key}&units=metric&lang={lang}').json()
+        current_temp = current_weather_data['main']['temp']
+        await update.message.reply_text(f'Temperatura atual para {city}, {state} - {country} \n➡ {current_temp}º C')
+    else:
+        await update.message.reply_text('Siga o padrão de parâmetros para ver o clima. Na dúvida, digite "/help".')
+
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token(token).build()
@@ -87,5 +103,6 @@ if __name__ == '__main__':
     application.add_handler(CommandHandler('help', help_me))
     application.add_handler(CommandHandler('cotacao', cotacao))
     application.add_handler(CommandHandler('traducao', traducao))
+    application.add_handler(CommandHandler('clima', clima))
 
     application.run_polling()
